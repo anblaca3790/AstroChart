@@ -61,6 +61,9 @@
 	// Background wrapper element ID
 	astrology.ID_BG = "bg";
 	
+	//a DOM class for draggable planets
+	astrology.CLASS_DRAGGABLE = "draggable";
+	
 	// Color of circles in charts
 	astrology.CIRCLE_COLOR = "#333";
 	
@@ -2283,6 +2286,7 @@
         	// draw symbol						
 			var symbol = this.paper.getSymbol(point.name, point.x, point.y);
         	symbol.setAttribute('id', astrology.ID_CHART + "-" + astrology.ID_TRANSIT + "-" + astrology.ID_POINTS + "-" + point.name);
+        	symbol.setAttribute('class', astrology.ID_CHART + "-" + astrology.ID_TRANSIT + "-" + astrology.CLASS_DRAGGABLE);
         	wrapper.appendChild( symbol );
         	        	        	        
         	// draw point descriptions
@@ -2455,6 +2459,32 @@
 																											
 		 // this
         return context;				
+	};
+	
+	astrology.Transit.prototype.draggable = function( callback ){
+		 
+		var handler = new astrology.InputHandler( (function( event ){
+			
+			/*
+			var key = astrology.utils.getLastPart( event.target.id );									
+			var tmpPlanetsData = Object.assign({}, this.data.planets);			
+			tmpPlanetsData[key] = [astrology.utils.getPointAngle( this.cx, this.cy, event.posX, event.posY )];
+			*/
+			
+			var matrix = event.target.getAttribute("transform").slice(7,-1).split(' ');
+			for(var i=0; i < matrix.length; i++) {
+        		matrix[i] = parseFloat( matrix[i] );
+			}
+			
+			matrix[4] += event.deltaX;
+			matrix[5] += event.deltaY;
+
+			//console.log(matrix);			
+			event.target.setAttribute("transform", "matrix(" + matrix.join(" ") + ")" );
+										
+		}).bind(this) );
+		
+	  handler.setTargets(  document.querySelectorAll("." + astrology.ID_CHART + "-" + astrology.ID_TRANSIT + "-" + astrology.CLASS_DRAGGABLE));
 	};
 		
 }( window.astrology = window.astrology || {}));
@@ -3290,6 +3320,171 @@
 	}
 						 		
 }( window.astrology = window.astrology || {}));
+// ## Base InputHandler ###################################
+(function( astrology ) {
+		
+	var context;
+    
+	/**
+	 * Base Input Handler
+	 * 
+	 * @class
+	 * @public
+	 * @constructor 	 
+	 */
+	astrology.InputHandler = function( callBack ){  
+		
+		this.callback = callBack;
+		
+		this.elements = null;	
+    	this.moving = false;
+    	
+    	this.moveThreshold = 1;
+    	this.stopDomEvents = true;
+    	
+    	// TODO
+    	/*    	     	
+    	if( astrology.utils.isTouchDevice() ){
+    		astrology.utils.mixin(this, astrology.Touchhandler(), ["hello"]);
+    	}else{
+    		astrology.utils.mixin(this, astrology.MouseHandler(), ["hello"]);
+    	}
+    	*/    
+    	
+    	context = this;	    	    	    	    	    
+	};
+	
+	/**
+	 * 
+ 	 * @param {Object} eventTarget - DOM element
+	 */
+	astrology.InputHandler.prototype.setTargets = function( elements ){		
+		this.elements = elements;
+		elements.forEach( function(element){			
+			this.attachDomListeners( element );
+			
+			// TODO
+			element.setAttribute( "transform", "matrix(1 0 0 1 0 0)" );
+						
+		}, this);			
+	};
+	
+	/**
+	 * @param {EventTarget} element
+	 */
+	astrology.InputHandler.prototype.attachDomListeners = function( element ){
+		element.addEventListener("mousedown", (this.onDownDomEvent).bind(this), false);
+		element.addEventListener("mouseup", (this.onUpDomEvent).bind(this), false);
+		element.addEventListener("mousemove", this.onMoveDomEvent, false);
+		element.addEventListener("mouseout", (this.onMouseOutDomEvent).bind(this), false);										
+	};
+	
+	/**
+	 * @param {Object} e - DOM Event
+	 */
+	astrology.InputHandler.prototype.onDownDomEvent = function(e){
+		
+		// We must save this coordinates to support the moveThreshold							
+		this.lastMoveCoordinates = this.getInputCoordinates(e);
+		this.moving = true;
+		console.log("down")			
+	};
+	
+	/**
+	 * @param {Object} e - DOM Event
+	 */
+	astrology.InputHandler.prototype.onUpDomEvent = function(e){	
+		this.moving = false;
+		console.log("up")				
+	};
+	
+	/**
+	 * @param {Object} e - DOM Event
+	 */
+	astrology.InputHandler.prototype.onMouseOutDomEvent = function(e){	
+		this.moving = false;	
+		console.log("out")			
+	};
+		
+	/**
+	 * Listens to the "move" DOM events: mousemove and touchmove.
+	 * @param {Object} e - DOM move event: {posX:100, posY:200, deltaX:1, deltaY:0, target:Object}
+	 */
+	astrology.InputHandler.prototype.onMoveDomEvent = function( e ){							
+		if( context.moving != true){
+			return;
+		}
+										
+		var coords = context.getInputCoordinates(e);	   
+    	var deltaX = coords.posX - context.lastMoveCoordinates.posX;
+    	var deltaY = coords.posY - context.lastMoveCoordinates.posY;
+    	                      
+    	// Check threshold
+    	//if (Math.sqrt(deltaX*deltaX + deltaY*deltaY) > context.moveThreshold) {
+    		
+    		if( typeof context.callback == 'function'){		
+				context.callback( {					
+					"posX":coords.posX, 
+					"posY":coords.posY,
+					"deltaX":deltaX,
+					"deltaY":deltaY,
+					"target": this
+					});
+				context.lastMoveCoordinates = coords;
+			}	    			        	        	    
+    	//}
+    															
+	};
+		
+	/**
+ 	* Input coordinates
+ 	* @param {Object} e - DOM event
+ 	* @returns {Object}
+ 	*/
+	astrology.InputHandler.prototype.getInputCoordinates = function(e){						
+		var coords = e.targetTouches ? e.targetTouches[0] : e;
+						
+		return {
+			posX: coords.pageX,
+			posY: coords.pageY
+		};		
+	};
+			
+}( window.astrology = window.astrology || {}));
+
+// ## MouseInputHander ###################################
+(function( astrology ) {
+		
+	var context;
+    
+	/**
+	 * Mouse input hander
+	 * 
+	 * @class
+	 * @public
+	 * @constructor 	 
+	 */
+	astrology.MouseInputHandler = function( ){};
+	
+}( window.astrology = window.astrology || {}));
+
+// ## TouchInputHander ###################################
+(function( astrology ) {
+		
+	var context;
+    
+	/**
+	 * Touch input hander
+	 * 
+	 * @class
+	 * @public
+	 * @constructor 	 
+	 */
+	astrology.TouchInputHandler = function( ){};
+	
+	
+	
+}( window.astrology = window.astrology || {}));
 // ## UTILS #############################
 (function( astrology ) {
 	
@@ -3311,6 +3506,21 @@
 		var yPos = cy + radius * Math.sin( angleInRadius );							  		  			
 		return {x:xPos, y:yPos};
 	};
+	
+	/**
+	 * @param {int} cx - center x 
+	 * @param {int} cy - center y
+	 * @param {int} posX - the point X position
+	 * @param {int} posY - the point Y position
+	 * 
+	 * @return {ing} angle in degrees 
+	 */
+	astrology.utils.getPointAngle = function( cx, cy, posX, posY ){		
+		var dy = posY - cy;
+  		var dx = posX - cx;  		
+  		return astrology.SHIFT_IN_DEGREES - astrology.utils.radiansToDegree( Math.atan2(dy, dx) );
+	};
+	
 	
 	astrology.utils.degreeToRadians = function( degree ){
 		return degrees * Math.PI / 180;
@@ -3635,6 +3845,7 @@
 	*/
 	astrology.utils.comparePoints = function( pointA, pointB){		
 		return pointA.angle - pointB.angle; 			
+
 	};
 									
 }( window.astrology = window.astrology || {}));
